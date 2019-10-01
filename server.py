@@ -1,8 +1,16 @@
+# Python program to implement server side of chat room. 
 import socket 
+import select 
 import sys 
 from thread import *
+from cryptography.fernet import Fernet
 
 import dbConnector
+
+file = open('chat_key.key', 'rb')
+key = file.read() # The key will be type bytes
+file.close()
+fernet = Fernet(key)
 
 """The first argument AF_INET is the address domain of the 
 socket. This is used when we have an Internet Domain with 
@@ -19,11 +27,11 @@ server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
 # takes the first argument from command prompt as IP address 
 # IP_address = str(sys.argv[1]) 
-IP_address = "0.0.0.0" 
+IP_address = "127.0.0.1" 
 
 # takes second argument from command prompt as port number 
 # Port = int(sys.argv[2]) 
-Port = 8888
+Port = 8000
 
 """ 
 binds the server to an entered IP address and at the 
@@ -33,7 +41,8 @@ The client must be aware of these parameters
 server.bind((IP_address, Port)) 
 
 """ 
-listens for 10 active connections.
+listens for 100 active connections. This number can be 
+increased as per convenience. 
 """
 server.listen(10) 
 
@@ -45,21 +54,22 @@ def printPreviousChats(chatroom_name, conn):
 	# print("\n\nMessages for chatroom " + str(chatroom_name))
 	for chat in chat_room.find():
 		# print("> " + chat["message"].split("\n")[0])
-		conn.send("<{}> ".format(chat["name"]) + chat["message"].split("\n")[0])
+		message = fernet.encrypt(str("<{}> ".format(chat["name"]) + chat["message"].split("\n")[0]))
+		conn.send(message)
 
-def clientthread(conn, addr, c_name): 
+def clientthread(conn, addr, c_name, room_name): 
 
 	# sends a message to the client whose user object is conn 
-	conn.send("Welcome to Gremlin's Aura!") 
-	ROOM_NAME = "room_1"
-	chat_room = dbConnector.db[ROOM_NAME]
+	conn.send(fernet.encrypt("Welcome to this chatroom!")) 
+	chat_room = dbConnector.db[room_name]
 
-	printPreviousChats(ROOM_NAME, conn)
+	printPreviousChats(room_name, conn)
 
 	while True: 
-			try: 
-				message = conn.recv(2048) 
-				if message: 
+			try:
+				message = conn.recv(2048*10) 
+				if message:
+					message = fernet.decrypt(message)
 
 					"""prints the message and address of the 
 					user who just sent the message on the server 
@@ -69,12 +79,11 @@ def clientthread(conn, addr, c_name):
 					chat_room.insert_one({
 						"name": str(c_name),
 						"message": str(message)
-						#"timestamp": str(time.now())
 					})
 
 					# Calls broadcast function to send message to all 
-					message_to_send = "<" + c_name + "> " + message 
-					broadcast(message_to_send, conn) 
+					message = fernet.encrypt("<" + c_name + "> " + message)
+					broadcast(message, conn) 
 
 				else: 
 					"""message may have no content if the connection 
@@ -112,8 +121,9 @@ while True:
 	which contains the IP address of the client that just 
 	connected"""
 	conn, addr = server.accept() 
-	username = conn.recv(2048)
-	print("User {} trying to connect".format(username))
+	message = conn.recv(2048*10)
+	[room, username] = fernet.decrypt(message).split(":")
+	print("User {} trying to connect to room {}".format(username, room))
 
 	"""Maintains a list of clients for ease of broadcasting 
 	a message to all available people in the chatroom"""
@@ -124,7 +134,7 @@ while True:
 
 	# creates and individual thread for every user 
 	# that connects 
-	start_new_thread(clientthread,(conn,addr,username))	 
+	start_new_thread(clientthread,(conn, addr, username, room))	 
 
 conn.close() 
 server.close() 

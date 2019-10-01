@@ -2,12 +2,6 @@
 import socket 
 import select 
 import sys 
-from cryptography.fernet import Fernet
-
-file = open('chat_key.key', 'rb')
-key = file.read() # The key will be type bytes
-file.close()
-fernet = Fernet(key)
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
 # if len(sys.argv) != 3: 
@@ -20,9 +14,7 @@ Port =  8000 # 8888 # 8000
 server.connect((IP_address, Port)) 
 room = raw_input("Room: ")
 username = raw_input("Username: ")
-message = str(room)+":"+str(username)
-message = fernet.encrypt(message)
-server.send(message)
+server.send(str(room)+":"+str(username))
 # server.send("Hello world test!")
 
 while True: 
@@ -39,12 +31,10 @@ while True:
 	below.If the user wants to send a message, the else 
 	condition will evaluate as true"""
 	read_sockets,write_socket, error_socket = select.select(sockets_list,[],[]) 
-	close_connection = False
 
 	for socks in read_sockets: 
 		if socks == server: 
-			message = socks.recv(2048*10) 
-			message = fernet.decrypt(message)
+			message = socks.recv(2048) 
 			if message[1:message.find(">")] == username:
 				sys.stdout.write("<You> " + message.split("> ")[1].split("\n")[0] + "\n") 
 				sys.stdout.flush()
@@ -53,16 +43,9 @@ while True:
 				sys.stdout.flush()
 			# print message 
 		else: 
-			raw_message = sys.stdin.readline()
-			if raw_message == "exit-session\n":
-				close_connection = True
-				break
-			message = fernet.encrypt(raw_message)
+			message = sys.stdin.readline() 
 			server.send(message) 
 			sys.stdout.write("<You> ") 
-			sys.stdout.write(raw_message) 
+			sys.stdout.write(message) 
 			sys.stdout.flush() 
-
-	if close_connection:
-		break
 server.close() 

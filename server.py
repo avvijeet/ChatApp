@@ -3,14 +3,8 @@ import socket
 import select 
 import sys 
 from thread import *
-from cryptography.fernet import Fernet
 
 import dbConnector
-
-file = open('chat_key.key', 'rb')
-key = file.read() # The key will be type bytes
-file.close()
-fernet = Fernet(key)
 
 """The first argument AF_INET is the address domain of the 
 socket. This is used when we have an Internet Domain with 
@@ -54,22 +48,20 @@ def printPreviousChats(chatroom_name, conn):
 	# print("\n\nMessages for chatroom " + str(chatroom_name))
 	for chat in chat_room.find():
 		# print("> " + chat["message"].split("\n")[0])
-		message = fernet.encrypt(str("<{}> ".format(chat["name"]) + chat["message"].split("\n")[0]))
-		conn.send(message)
+		conn.send("<{}> ".format(chat["name"]) + chat["message"].split("\n")[0])
 
 def clientthread(conn, addr, c_name, room_name): 
 
 	# sends a message to the client whose user object is conn 
-	conn.send(fernet.encrypt("Welcome to this chatroom!")) 
+	conn.send("Welcome to this chatroom!") 
 	chat_room = dbConnector.db[room_name]
 
 	printPreviousChats(room_name, conn)
 
 	while True: 
-			try:
-				message = conn.recv(2048*10) 
-				if message:
-					message = fernet.decrypt(message)
+			try: 
+				message = conn.recv(2048) 
+				if message: 
 
 					"""prints the message and address of the 
 					user who just sent the message on the server 
@@ -82,8 +74,8 @@ def clientthread(conn, addr, c_name, room_name):
 					})
 
 					# Calls broadcast function to send message to all 
-					message = fernet.encrypt("<" + c_name + "> " + message)
-					broadcast(message, conn) 
+					message_to_send = "<" + c_name + "> " + message 
+					broadcast(message_to_send, conn) 
 
 				else: 
 					"""message may have no content if the connection 
@@ -121,8 +113,7 @@ while True:
 	which contains the IP address of the client that just 
 	connected"""
 	conn, addr = server.accept() 
-	message = conn.recv(2048*10)
-	[room, username] = fernet.decrypt(message).split(":")
+	[room, username] = conn.recv(2048).split(":")
 	print("User {} trying to connect to room {}".format(username, room))
 
 	"""Maintains a list of clients for ease of broadcasting 
@@ -134,7 +125,7 @@ while True:
 
 	# creates and individual thread for every user 
 	# that connects 
-	start_new_thread(clientthread,(conn, addr, username, room))	 
+	start_new_thread(clientthread,(conn,addr,username, room))	 
 
 conn.close() 
 server.close() 
